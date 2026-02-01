@@ -2,10 +2,10 @@ defmodule FastDecimalTest do
 use ExUnit.Case
 
 require Decimal
-require FastDecimal.RustDecimal
-require FastDecimal.FastNum
+require FastDecimal.Impl.RustDecimal
+require FastDecimal.Impl.Fastnum
 require FastDecimal
-@mods [Decimal, FastDecimal.RustDecimal, FastDecimal.FastNum, FastDecimal]
+@mods [Decimal, FastDecimal.Impl.RustDecimal, FastDecimal.Impl.Fastnum, FastDecimal]
 
 
 test "decimal multiplication" do
