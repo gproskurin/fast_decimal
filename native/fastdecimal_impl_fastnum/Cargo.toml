@@ -11,3 +11,8 @@ crate-type = ["cdylib"]
 rustler = "0"
 fastnum = "0"
 
+[features]
+default = []
+dec_type_d64 = []
+dec_type_d128 = []
+

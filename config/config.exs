@@ -7,6 +7,9 @@ Config.config :logger, :console,
 
 Config.config :fast_decimal,
     #decimal_impl: Decimal
-    decimal_impl: FastDecimal.Impl.RustDecimal
-    #decimal_impl: FastDecimal.Impl.Fastnum
+    #decimal_impl: FastDecimal.Impl.RustDecimal
+    decimal_impl: FastDecimal.Impl.Fastnum
+
+Config.config :fast_decimal, FastDecimal.Impl.Fastnum,
+    features: ["dec_type_d64"]
 
