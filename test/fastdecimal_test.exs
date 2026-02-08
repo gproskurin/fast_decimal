@@ -20,6 +20,46 @@ test "decimal division" do
 end
 
 
+test "new from string" do
+    do_op_new = fn str, exp_strs ->
+        Enum.each(
+            @mods,
+            fn mod ->
+                dec = :erlang.apply(mod, :new, [str])
+                # string representation should match at least one of expected strings
+                dec_str = :erlang.apply(mod, :to_string, [dec])
+                assert Enum.member?(exp_strs, dec_str)
+            end
+        )
+    end
+    do_op_new.("123.456", ["123.456"])
+    do_op_new.("-0.00123456789", ["-0.00123456789"])
+    do_op_new.("0", ["0"])
+end
+
+
+test "new raise" do
+    ex_map = %{
+        Decimal => Decimal.Error,
+        FastDecimal.Impl.Fastnum => ArgumentError,
+        FastDecimal => ArgumentError
+    }
+    do_op_new = fn str ->
+        Enum.each(
+            @mods,
+            fn mod ->
+                exp_ex = Map.fetch!(ex_map, mod)
+                assert_raise exp_ex, fn -> :erlang.apply(mod, :new, [str]) end
+            end
+        )
+    end
+    do_op_new.("")
+    do_op_new.("qwe")
+    do_op_new.("123qwe")
+    do_op_new.("123 1")
+end
+
+
 test "decimal from mantissa & scale" do
     do_op_new = fn(mantissa, scale, exp_strs) ->
         Enum.each(

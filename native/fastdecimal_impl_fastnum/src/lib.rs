@@ -61,14 +61,21 @@ unsafe fn dec_to_bytes(d: &Dec) -> [u8; TOTAL_SIZE]
 
 #[rustler::nif(name="new")]
 #[cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
-pub fn from_str<'a>(env: rustler::Env<'a>, s: String) -> rustler::Binary<'a>
+pub fn from_str<'a>(env: rustler::Env<'a>, s: String) -> rustler::NifResult<rustler::Binary<'a>>
 {
     let ctx = fastnum::decimal::Context::default();
-    let d = Dec::from_str(&s, ctx).unwrap(); // TODO add check
-    let raw = unsafe { dec_to_bytes(&d) };
-    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
-    bin.as_mut_slice().copy_from_slice(&raw);
-    bin.release(env)
+    match Dec::from_str(&s, ctx)
+    {
+        Ok(d) => {
+             let raw = unsafe { dec_to_bytes(&d) };
+             let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
+             bin.as_mut_slice().copy_from_slice(&raw);
+             Ok(bin.release(env))
+        },
+        Err(_) => {
+            Err(rustler::Error::BadArg)
+        }
+    }
 }
 
 
