@@ -1,10 +1,6 @@
 defmodule FastDecimalTest do
 use ExUnit.Case
 
-require Decimal
-require FastDecimal.Impl.RustDecimal
-require FastDecimal.Impl.Fastnum
-require FastDecimal
 @mods [Decimal, FastDecimal.Impl.RustDecimal, FastDecimal.Impl.Fastnum, FastDecimal]
 
 
@@ -42,6 +38,7 @@ test "new raise" do
     ex_map = %{
         Decimal => Decimal.Error,
         FastDecimal.Impl.Fastnum => ArgumentError,
+        FastDecimal.Impl.RustDecimal => ArgumentError,
         FastDecimal => ArgumentError
     }
     do_op_new = fn str ->

@@ -1,44 +1,51 @@
 use rust_decimal::Decimal;
-use rustler::types::binary::OwnedBinary;
+use rustler;
 use rustler::{Binary, Env};
 use std::str::FromStr;
 
-const DEC_BIN_LEN: usize = 20;
+const TOTAL_SIZE: usize = std::mem::size_of::<Decimal>();
 
-/// Encode Decimal as <<mantissa::little-128, scale::little-32>> into a VM-owned Binary.
-fn encode_decimal_into_owned<'a>(env: Env<'a>, d: &Decimal) -> Binary<'a> {
-    let mantissa = d.mantissa(); // i128 (signed)
-    let scale = d.scale();       // u32
 
-    let mut out = OwnedBinary::new(DEC_BIN_LEN).unwrap();
-    let buf = out.as_mut_slice();
-    buf[0..16].copy_from_slice(&mantissa.to_le_bytes());
-    buf[16..20].copy_from_slice(&scale.to_le_bytes());
-
-    out.release(env)
+fn bytes_to_dec(bytes_ptr: *const u8) -> Decimal {
+    let mut d = std::mem::MaybeUninit::<Decimal>::uninit();
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            bytes_ptr,
+            d.as_mut_ptr() as *mut u8,
+            TOTAL_SIZE
+        );
+    }
+    unsafe { d.assume_init() }
 }
 
-/// Decode from <<mantissa::little-128, scale::little-32>> into Decimal.
-/// NO checks (assumes exactly 20 bytes, valid contents).
-fn decode_decimal_unchecked(bin: Binary<'_>) -> Decimal {
-    let mut mantissa_bytes = [0u8; 16];
-    mantissa_bytes.copy_from_slice(&bin.as_slice()[0..16]);
-    let mantissa = i128::from_le_bytes(mantissa_bytes);
 
-    let mut scale_bytes = [0u8; 4];
-    scale_bytes.copy_from_slice(&bin.as_slice()[16..20]);
-    let scale = u32::from_le_bytes(scale_bytes);
-
-    // Construct via from_i128_with_scale as requested
-    Decimal::from_i128_with_scale(mantissa, scale)
+#[inline]
+fn dec_to_binary(d: &Decimal) -> rustler::OwnedBinary
+{
+    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            d as *const Decimal as *const u8,
+            bin.as_mut_ptr(),
+            TOTAL_SIZE
+        );
+    }
+    bin
 }
+
 
 /// Parse a decimal string into a compact 20-byte **binary**.
-/// NO error handling: will panic on invalid string.
 #[rustler::nif(name="new")]
-fn from_str<'a>(env: Env<'a>, s: String) -> Binary<'a> {
-    let d = Decimal::from_str(&s).unwrap();
-    encode_decimal_into_owned(env, &d)
+fn from_str<'a>(env: Env<'a>, s: String) -> rustler::NifResult<Binary<'a>> {
+    match Decimal::from_str(&s)
+    {
+        Ok(d) => {
+            Ok(dec_to_binary(&d).release(env))
+        }
+        Err(_) => {
+            Err(rustler::Error::BadArg)
+        }
+    }
 }
 
 
@@ -93,37 +100,37 @@ fn new_from_elixir<'a>(env: Env<'a>, _sign: i8, coef: i128, exp: i32) -> Binary<
         };
 
     let d = Decimal::from_i128_with_scale(final_mantissa, scale);
-    encode_decimal_into_owned(env, &d)
+    dec_to_binary(&d).release(env)
 }
 
 /// Multiply two compact decimal **binaries**.
 /// NO overflow check: uses `a * b` (may panic on overflow).
 #[rustler::nif]
 fn mult<'a>(env: Env<'a>, a_bin: Binary<'a>, b_bin: Binary<'a>) -> Binary<'a> {
-    let a = decode_decimal_unchecked(a_bin);
-    let b = decode_decimal_unchecked(b_bin);
+    let a = bytes_to_dec(a_bin.as_ptr());
+    let b = bytes_to_dec(b_bin.as_ptr());
     let res = a * b; // no checked_mul
-    encode_decimal_into_owned(env, &res)
+    dec_to_binary(&res).release(env)
 }
 
 #[rustler::nif]
 fn div<'a>(env: Env<'a>, a_bin: Binary<'a>, b_bin: Binary<'a>) -> Binary<'a> {
-    let a = decode_decimal_unchecked(a_bin);
-    let b = decode_decimal_unchecked(b_bin);
+    let a = bytes_to_dec(a_bin.as_ptr());
+    let b = bytes_to_dec(b_bin.as_ptr());
     let res = a / b;
-    encode_decimal_into_owned(env, &res)
+    dec_to_binary(&res).release(env)
 }
 
 #[rustler::nif(name="equal?")]
 fn eq(a: Binary, b: Binary) -> bool {
-    return decode_decimal_unchecked(a) == decode_decimal_unchecked(b);
+    return bytes_to_dec(a.as_ptr()) == bytes_to_dec(b.as_ptr());
 }
 
 
 #[rustler::nif(name="gt?")]
 fn gt(a: Binary, b: Binary) -> bool
 {
-    return decode_decimal_unchecked(a) > decode_decimal_unchecked(b);
+    return bytes_to_dec(a.as_ptr()) > bytes_to_dec(b.as_ptr());
 }
 
 
@@ -131,8 +138,7 @@ fn gt(a: Binary, b: Binary) -> bool
 /// NO error handling: assumes valid 20-byte binary.
 #[rustler::nif]
 fn to_string(bin: Binary<'_>) -> String {
-    let d = decode_decimal_unchecked(bin);
-    d.to_string()
+    bytes_to_dec(bin.as_ptr()).to_string()
 }
 
 
