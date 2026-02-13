@@ -6,20 +6,6 @@ compile_error!("At least some dec_type_* feature must be enabled");
 use fastnum;
 use rustler;
 
-pub trait DecTraits {
-    const _COEF_SIZE: usize;
-    const _CONTROL_BLOCK_SIZE: usize = 8;
-    const TOTAL_SIZE: usize = Self::_COEF_SIZE + Self::_CONTROL_BLOCK_SIZE;
-}
-
-impl DecTraits for fastnum::decimal::D64 {
-    const _COEF_SIZE: usize = 8;
-}
-
-impl DecTraits for fastnum::decimal::D128 {
-    const _COEF_SIZE: usize = 16;
-}
-
 
 #[cfg(feature="dec_type_d64")]
 pub type Dec = fastnum::decimal::D64;
@@ -27,35 +13,38 @@ pub type Dec = fastnum::decimal::D64;
 #[cfg(feature="dec_type_d128")]
 pub type Dec = fastnum::decimal::D128;
 
-
-const TOTAL_SIZE: usize = <Dec as DecTraits>::TOTAL_SIZE;
+const TOTAL_SIZE: usize = std::mem::size_of::<Dec>();
 
 
 #[inline]
 #[cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
-unsafe fn bytes_to_dec(bytes: &[u8]) -> Dec
+fn bytes_to_dec(bytes_ptr: *const u8) -> Dec
 {
-    let mut tmp = std::mem::MaybeUninit::<Dec>::uninit();
-    std::ptr::copy_nonoverlapping(
-        bytes.as_ptr(),
-        tmp.as_mut_ptr() as *mut u8,
-        TOTAL_SIZE
-    );
-    tmp.assume_init()
+    let mut d = std::mem::MaybeUninit::<Dec>::uninit();
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            bytes_ptr,
+            d.as_mut_ptr() as *mut u8,
+            TOTAL_SIZE
+        );
+    }
+    unsafe { d.assume_init() }
 }
 
 
 #[inline]
 #[cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
-unsafe fn dec_to_bytes(d: &Dec) -> [u8; TOTAL_SIZE]
+fn dec_to_binary(d: &Dec) -> rustler::OwnedBinary
 {
-    let mut out = [0u8; TOTAL_SIZE];
-    std::ptr::copy_nonoverlapping(
-        d as *const Dec as *const u8,
-        out.as_mut_ptr(),
-        TOTAL_SIZE
-    );
-    out
+    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            d as *const Dec as *const u8,
+            bin.as_mut_ptr(),
+            TOTAL_SIZE
+        );
+    }
+    bin
 }
 
 
@@ -67,10 +56,7 @@ pub fn from_str<'a>(env: rustler::Env<'a>, s: String) -> rustler::NifResult<rust
     match Dec::from_str(&s, ctx)
     {
         Ok(d) => {
-             let raw = unsafe { dec_to_bytes(&d) };
-             let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
-             bin.as_mut_slice().copy_from_slice(&raw);
-             Ok(bin.release(env))
+            Ok(dec_to_binary(&d).release(env))
         },
         Err(_) => {
             Err(rustler::Error::BadArg)
@@ -86,10 +72,7 @@ fn from_mantissa_scale<'a>(env: rustler::Env<'a>, _sign: i8, mantissa: u64, scal
     let ctx = fastnum::decimal::Context::default();
     let value: Dec = Dec::from_u64(mantissa) * Dec::quantum(scale, ctx); // FIXME u64
 
-    let raw = unsafe { dec_to_bytes(&value) };
-    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
-    bin.as_mut_slice().copy_from_slice(&raw);
-    bin.release(env)
+    dec_to_binary(&value).release(env)
 }
 
 
@@ -106,13 +89,10 @@ where
     if a.len() != TOTAL_SIZE || b.len() != TOTAL_SIZE {
         return Err(rustler::Error::BadArg);
     }
-    let da = unsafe { bytes_to_dec(a.as_slice()) };
-    let db = unsafe { bytes_to_dec(b.as_slice()) };
+    let da = bytes_to_dec(a.as_ptr());
+    let db = bytes_to_dec(b.as_ptr());
     let r = f(&da, &db);
-    let bytes = unsafe { dec_to_bytes(&r) };
-    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
-    bin.as_mut_slice().copy_from_slice(&bytes);
-    Ok(bin.release(env))
+    Ok(dec_to_binary(&r).release(env))
 }
 
 
@@ -124,8 +104,8 @@ where
     if a.len() != TOTAL_SIZE || b.len() != TOTAL_SIZE {
         return Err(rustler::Error::BadArg);
     }
-    let da = unsafe { bytes_to_dec(a.as_slice()) };
-    let db = unsafe { bytes_to_dec(b.as_slice()) };
+    let da = bytes_to_dec(a.as_ptr());
+    let db = bytes_to_dec(b.as_ptr());
     return Ok(f(&da, &db));
 }
 
@@ -169,7 +149,7 @@ fn to_string(bin: rustler::Binary) -> rustler::NifResult<String> {
     if bin.len() != TOTAL_SIZE {
         return Err(rustler::Error::BadArg);
     }
-    let d = unsafe { bytes_to_dec(bin.as_slice()) };
+    let d = bytes_to_dec(bin.as_ptr());
     Ok(d.to_string())
 }
 
