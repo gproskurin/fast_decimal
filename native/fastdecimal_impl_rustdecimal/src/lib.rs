@@ -2,31 +2,7 @@ use rust_decimal::Decimal;
 use rustler;
 use rustler::{Binary, Env};
 use std::str::FromStr;
-
-const TOTAL_SIZE: usize = std::mem::size_of::<Decimal>();
-
-
-fn bytes_to_dec(bytes_ptr: *const u8) -> Decimal {
-    let mut d = std::mem::MaybeUninit::<Decimal>::uninit();
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            bytes_ptr,
-            d.as_mut_ptr() as *mut u8,
-            TOTAL_SIZE
-        );
-    }
-    unsafe { d.assume_init() }
-}
-
-
-fn dec_to_binary<'a>(env: rustler::Env<'a>, d: &Decimal) -> rustler::Binary<'a>
-{
-    let mut nb = rustler::NewBinary::new(env, TOTAL_SIZE);
-    unsafe {
-        nb.as_mut_slice().copy_from_slice(std::slice::from_raw_parts(d as *const Decimal as *const u8, TOTAL_SIZE));
-    }
-    nb.into()
-}
+use fastdecimal_impl_lib;
 
 
 /// Parse a decimal string into a compact 20-byte **binary**.
@@ -35,7 +11,7 @@ fn from_str<'a>(env: Env<'a>, s: String) -> rustler::NifResult<Binary<'a>> {
     match Decimal::from_str(&s)
     {
         Ok(d) => {
-            Ok(dec_to_binary(env, &d))
+            Ok(fastdecimal_impl_lib::dec_to_binary(env, &d))
         }
         Err(_) => {
             Err(rustler::Error::BadArg)
@@ -95,37 +71,37 @@ fn new_from_elixir<'a>(env: Env<'a>, _sign: i8, coef: i128, exp: i32) -> Binary<
         };
 
     let d = Decimal::from_i128_with_scale(final_mantissa, scale);
-    dec_to_binary(env, &d)
+    fastdecimal_impl_lib::dec_to_binary(env, &d)
 }
 
 /// Multiply two compact decimal **binaries**.
 /// NO overflow check: uses `a * b` (may panic on overflow).
 #[rustler::nif]
 fn mult<'a>(env: Env<'a>, a_bin: Binary<'a>, b_bin: Binary<'a>) -> Binary<'a> {
-    let a = bytes_to_dec(a_bin.as_ptr());
-    let b = bytes_to_dec(b_bin.as_ptr());
+    let a = fastdecimal_impl_lib::bytes_to_dec::<Decimal>(a_bin.as_ptr());
+    let b = fastdecimal_impl_lib::bytes_to_dec::<Decimal>(b_bin.as_ptr());
     let res = a * b; // no checked_mul
-    dec_to_binary(env, &res)
+    fastdecimal_impl_lib::dec_to_binary(env, &res)
 }
 
 #[rustler::nif]
 fn div<'a>(env: Env<'a>, a_bin: Binary<'a>, b_bin: Binary<'a>) -> Binary<'a> {
-    let a = bytes_to_dec(a_bin.as_ptr());
-    let b = bytes_to_dec(b_bin.as_ptr());
+    let a = fastdecimal_impl_lib::bytes_to_dec::<Decimal>(a_bin.as_ptr());
+    let b = fastdecimal_impl_lib::bytes_to_dec::<Decimal>(b_bin.as_ptr());
     let res = a / b;
-    dec_to_binary(env, &res)
+    fastdecimal_impl_lib::dec_to_binary(env, &res)
 }
 
 #[rustler::nif(name="equal?")]
 fn eq(a: Binary, b: Binary) -> bool {
-    return bytes_to_dec(a.as_ptr()) == bytes_to_dec(b.as_ptr());
+    return fastdecimal_impl_lib::bytes_to_dec::<Decimal>(a.as_ptr()) == fastdecimal_impl_lib::bytes_to_dec::<Decimal>(b.as_ptr());
 }
 
 
 #[rustler::nif(name="gt?")]
 fn gt(a: Binary, b: Binary) -> bool
 {
-    return bytes_to_dec(a.as_ptr()) > bytes_to_dec(b.as_ptr());
+    return fastdecimal_impl_lib::bytes_to_dec::<Decimal>(a.as_ptr()) > fastdecimal_impl_lib::bytes_to_dec::<Decimal>(b.as_ptr());
 }
 
 
@@ -133,7 +109,7 @@ fn gt(a: Binary, b: Binary) -> bool
 /// NO error handling: assumes valid 20-byte binary.
 #[rustler::nif]
 fn to_string(bin: Binary<'_>) -> String {
-    bytes_to_dec(bin.as_ptr()).to_string()
+    fastdecimal_impl_lib::bytes_to_dec::<Decimal>(bin.as_ptr()).to_string()
 }
 
 

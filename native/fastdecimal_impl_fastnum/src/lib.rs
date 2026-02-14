@@ -1,3 +1,5 @@
+use fastdecimal_impl_lib;
+
 //#![cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
 
 #[cfg(not(any(feature="dec_type_d64", feature="dec_type_d128")))]
@@ -20,26 +22,15 @@ const TOTAL_SIZE: usize = std::mem::size_of::<Dec>();
 #[cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
 fn bytes_to_dec(bytes_ptr: *const u8) -> Dec
 {
-    let mut d = std::mem::MaybeUninit::<Dec>::uninit();
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            bytes_ptr,
-            d.as_mut_ptr() as *mut u8,
-            TOTAL_SIZE
-        );
-    }
-    unsafe { d.assume_init() }
+    fastdecimal_impl_lib::bytes_to_dec(bytes_ptr)
 }
 
 
+#[inline]
 #[cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
 fn dec_to_binary<'a>(env: rustler::Env<'a>, d: &Dec) -> rustler::Binary<'a>
 {
-    let mut nb = rustler::NewBinary::new(env, TOTAL_SIZE);
-    unsafe {
-        nb.as_mut_slice().copy_from_slice(std::slice::from_raw_parts(d as *const Dec as *const u8, TOTAL_SIZE));
-    }
-    nb.into()
+    fastdecimal_impl_lib::dec_to_binary(env, d)
 }
 
 

@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 rustler = "0"
 fastnum = "0"
+fastdecimal_impl_lib = { path = "../fastdecimal_impl_lib" }
 
 [features]
 default = []
