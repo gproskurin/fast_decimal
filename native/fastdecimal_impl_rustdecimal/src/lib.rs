@@ -19,18 +19,13 @@ fn bytes_to_dec(bytes_ptr: *const u8) -> Decimal {
 }
 
 
-#[inline]
-fn dec_to_binary(d: &Decimal) -> rustler::OwnedBinary
+fn dec_to_binary<'a>(env: rustler::Env<'a>, d: &Decimal) -> rustler::Binary<'a>
 {
-    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
+    let mut nb = rustler::NewBinary::new(env, TOTAL_SIZE);
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            d as *const Decimal as *const u8,
-            bin.as_mut_ptr(),
-            TOTAL_SIZE
-        );
+        nb.as_mut_slice().copy_from_slice(std::slice::from_raw_parts(d as *const Decimal as *const u8, TOTAL_SIZE));
     }
-    bin
+    nb.into()
 }
 
 
@@ -40,7 +35,7 @@ fn from_str<'a>(env: Env<'a>, s: String) -> rustler::NifResult<Binary<'a>> {
     match Decimal::from_str(&s)
     {
         Ok(d) => {
-            Ok(dec_to_binary(&d).release(env))
+            Ok(dec_to_binary(env, &d))
         }
         Err(_) => {
             Err(rustler::Error::BadArg)
@@ -100,7 +95,7 @@ fn new_from_elixir<'a>(env: Env<'a>, _sign: i8, coef: i128, exp: i32) -> Binary<
         };
 
     let d = Decimal::from_i128_with_scale(final_mantissa, scale);
-    dec_to_binary(&d).release(env)
+    dec_to_binary(env, &d)
 }
 
 /// Multiply two compact decimal **binaries**.
@@ -110,7 +105,7 @@ fn mult<'a>(env: Env<'a>, a_bin: Binary<'a>, b_bin: Binary<'a>) -> Binary<'a> {
     let a = bytes_to_dec(a_bin.as_ptr());
     let b = bytes_to_dec(b_bin.as_ptr());
     let res = a * b; // no checked_mul
-    dec_to_binary(&res).release(env)
+    dec_to_binary(env, &res)
 }
 
 #[rustler::nif]
@@ -118,7 +113,7 @@ fn div<'a>(env: Env<'a>, a_bin: Binary<'a>, b_bin: Binary<'a>) -> Binary<'a> {
     let a = bytes_to_dec(a_bin.as_ptr());
     let b = bytes_to_dec(b_bin.as_ptr());
     let res = a / b;
-    dec_to_binary(&res).release(env)
+    dec_to_binary(env, &res)
 }
 
 #[rustler::nif(name="equal?")]

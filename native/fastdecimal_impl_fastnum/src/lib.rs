@@ -32,19 +32,14 @@ fn bytes_to_dec(bytes_ptr: *const u8) -> Dec
 }
 
 
-#[inline]
 #[cfg(any(feature="dec_type_d64", feature="dec_type_d128"))]
-fn dec_to_binary(d: &Dec) -> rustler::OwnedBinary
+fn dec_to_binary<'a>(env: rustler::Env<'a>, d: &Dec) -> rustler::Binary<'a>
 {
-    let mut bin = rustler::OwnedBinary::new(TOTAL_SIZE).unwrap();
+    let mut nb = rustler::NewBinary::new(env, TOTAL_SIZE);
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            d as *const Dec as *const u8,
-            bin.as_mut_ptr(),
-            TOTAL_SIZE
-        );
+        nb.as_mut_slice().copy_from_slice(std::slice::from_raw_parts(d as *const Dec as *const u8, TOTAL_SIZE));
     }
-    bin
+    nb.into()
 }
 
 
@@ -56,7 +51,7 @@ pub fn from_str<'a>(env: rustler::Env<'a>, s: String) -> rustler::NifResult<rust
     match Dec::from_str(&s, ctx)
     {
         Ok(d) => {
-            Ok(dec_to_binary(&d).release(env))
+            Ok(dec_to_binary(env, &d))
         },
         Err(_) => {
             Err(rustler::Error::BadArg)
@@ -71,8 +66,7 @@ pub fn from_str<'a>(env: rustler::Env<'a>, s: String) -> rustler::NifResult<rust
 fn from_mantissa_scale<'a>(env: rustler::Env<'a>, _sign: i8, mantissa: u64, scale: i32) -> rustler::Binary<'a> {
     let ctx = fastnum::decimal::Context::default();
     let value: Dec = Dec::from_u64(mantissa) * Dec::quantum(scale, ctx); // FIXME u64
-
-    dec_to_binary(&value).release(env)
+    dec_to_binary(env, &value)
 }
 
 
@@ -92,7 +86,7 @@ where
     let da = bytes_to_dec(a.as_ptr());
     let db = bytes_to_dec(b.as_ptr());
     let r = f(&da, &db);
-    Ok(dec_to_binary(&r).release(env))
+    Ok(dec_to_binary(env, &r))
 }
 
 
